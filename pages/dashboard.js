@@ -41,7 +41,7 @@ const DashboardPage = () => {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (!user) {
-        window.location.href = '/login'; // Redirect to login if not authenticated
+        window.location.href = '/'; // Redirect to home page if not authenticated
       } else {
         setUser(user);
         loadNews(); // Fetch news articles when user is authenticated
