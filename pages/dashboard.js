@@ -66,7 +66,7 @@ const DashboardPage = () => {
 
   const loadNews = async () => {
     try {
-      const data = await fetchNews();
+      const data = await fetchNews('general', 1, 'news');
       setArticles(data.articles);
       setFilteredArticles(data.articles); // Initialize filtered articles
       setErrorMessage(''); // Clear any previous error messages
