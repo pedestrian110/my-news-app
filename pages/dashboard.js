@@ -3,8 +3,6 @@ import { useEffect, useState } from 'react';
 import { auth } from '../firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { fetchNews } from '../lib/fetchNews';
-import Papa from 'papaparse';
-import jsPDF from 'jspdf';
 import { Bar, Pie } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -27,29 +25,19 @@ const DashboardPage = () => {
   const [search, setSearch] = useState('');
   const [authorFilter, setAuthorFilter] = useState('');
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
+  
+  // Payout related states
   const [payoutPerArticle, setPayoutPerArticle] = useState(0);
   const [totalPayout, setTotalPayout] = useState(0);
+  
   const [errorMessage, setErrorMessage] = useState('');
   
-  // State for dark mode
-  const [isDarkMode, setIsDarkMode] = useState(false);
+  // Validation messages
+  const [searchError, setSearchError] = useState('');
+  const [authorError, setAuthorError] = useState('');
+  const [dateError, setDateError] = useState('');
 
-  // Toggle dark mode
-  const toggleDarkMode = () => {
-    setIsDarkMode(!isDarkMode);
-    localStorage.setItem('theme', !isDarkMode ? 'dark' : 'light'); // Save theme preference
-    document.body.classList.toggle('dark', !isDarkMode);
-    document.body.classList.toggle('light', isDarkMode);
-  };
-
-  // Load theme preference from local storage on mount
-  useEffect(() => {
-    const savedTheme = localStorage.getItem('theme') || 'light';
-    setIsDarkMode(savedTheme === 'dark');
-    document.body.classList.add(savedTheme);
-    document.body.classList.remove(savedTheme === 'dark' ? 'light' : 'dark');
-  }, []);
-
+  // Load user and news articles
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (!user) {
@@ -66,9 +54,9 @@ const DashboardPage = () => {
 
   const loadNews = async () => {
     try {
-      const data = await fetchNews('general', 1, 'news');
+      const data = await fetchNews();
       setArticles(data.articles);
-      setFilteredArticles(data.articles); // Initialize filtered articles
+      setFilteredArticles(data.articles || []); // Ensure it's an array
       setErrorMessage(''); // Clear any previous error messages
     } catch (error) {
       setErrorMessage(error.message); // Set error message if API call fails
@@ -83,16 +71,46 @@ const DashboardPage = () => {
     if (storedPayout) {
       setPayoutPerArticle(Number(storedPayout));
     }
+    calculateTotalPayout(); // Calculate total payouts on load
   };
 
-  // Calculate total payouts based on articles and payout rate
-  const calculateTotalPayout = () => {
-    const total = filteredArticles.length * payoutPerArticle;
-    setTotalPayout(total);
-  };
+   // Validate inputs
+   const validateInputs = () => {
+     let valid = true;
+
+     // Validate search input
+     if (!search.trim()) {
+       setSearchError('Search cannot be empty.');
+       valid = false;
+     } else {
+       setSearchError('');
+     }
+
+     // Validate author filter input
+     if (!authorFilter.trim()) {
+       setAuthorError('Author filter cannot be empty.');
+       valid = false;
+     } else {
+       setAuthorError('');
+     }
+
+     // Validate date range
+     if (dateRange.start && dateRange.end) {
+       if (new Date(dateRange.start) > new Date(dateRange.end)) {
+         setDateError('Start date must be before end date.');
+         valid = false;
+       } else {
+         setDateError('');
+       }
+     }
+
+     return valid;
+   };
 
    // Filter articles based on user input
    const filterArticles = () => {
+     if (!validateInputs()) return; // Only proceed if inputs are valid
+
      let results = articles;
 
      // Filter by author
@@ -136,13 +154,21 @@ const DashboardPage = () => {
      calculateTotalPayout(); // Recalculate total payout when payout rate changes
    };
 
+   // Calculate total payouts based on articles and payout rate
+   const calculateTotalPayout = () => {
+     const total = filteredArticles.length * payoutPerArticle;
+     setTotalPayout(total);
+   };
+
    // Data for analytics charts
    const getAnalyticsData = () => {
      const authorsCount = {};
      
-     filteredArticles.forEach(article => {
-       authorsCount[article.author || 'Unknown'] = (authorsCount[article.author || 'Unknown'] || 0) + 1;
-     });
+     if (Array.isArray(filteredArticles)) { 
+       filteredArticles.forEach(article => {
+         authorsCount[article.author || 'Unknown'] = (authorsCount[article.author || 'Unknown'] || 0) + 1;
+       });
+     }
 
      return {
        labels: Object.keys(authorsCount),
@@ -156,14 +182,10 @@ const DashboardPage = () => {
      <div className="container mx-auto p-4">
        <h1 className="text-2xl font-bold mb-4">Welcome to your Dashboard!</h1>
        
-       {/* Dark Mode Toggle Button */}
-       <button 
-         onClick={toggleDarkMode} 
-         className="mb-4 p-2 bg-gray-800 text-white rounded">
-         Toggle Dark Mode
-       </button>
-
-       {/* Error Message */}
+       {/* Error Messages */}
+       {searchError && <p className="text-red-500">{searchError}</p>}
+       {authorError && <p className="text-red-500">{authorError}</p>}
+       {dateError && <p className="text-red-500">{dateError}</p>}
        {errorMessage && <p className="text-red-500">{errorMessage}</p>}
 
        {/* Payout Settings */}
@@ -238,7 +260,7 @@ const DashboardPage = () => {
                }}
              />
            </div>
-           
+
            <h3 className="text-lg font-semibold mt-8">Article Distribution</h3>
            <div style={{ maxWidth: '400px', margin: '0 auto' }}>
              <Pie 
@@ -248,12 +270,12 @@ const DashboardPage = () => {
                    label: 'Number of Articles',
                    data: values,
                    backgroundColor: [
-                     'rgba(255,99,132,0.6)',
-                     'rgba(54,162,235,0.6)',
-                     'rgba(255,206,86,0.6)',
-                     'rgba(75,192,192,0.6)',
-                     'rgba(153,102,255,0.6)',
-                     'rgba(255,159,64,0.6)',
+                     '#FF6384',
+                     '#36A2EB',
+                     '#FFCE56',
+                     '#4BC0C0',
+                     '#9966FF',
+                     '#FF9F40',
                    ],
                  }],
                }}
@@ -280,7 +302,7 @@ const DashboardPage = () => {
            ))}
          </ul>
        ) : (
-         !errorMessage && <p>No articles found.</p> // Show this only if there's no error message.
+         !errorMessage && <p>No articles found.</p> 
        )}
      </div>
    );
